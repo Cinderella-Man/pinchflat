@@ -46,7 +46,10 @@ defmodule Pinchflat.TestingHelperMethods do
         "#{metadata_name}.json"
       ])
 
-    File.read!(json_filepath)
+    # Fixture paths were recorded under /app; resolve them against the project root
+    json_filepath
+    |> File.read!()
+    |> String.replace(~s("/app/), ~s("#{File.cwd!()}/))
   end
 
   def render_parsed_metadata(metadata_name) do
