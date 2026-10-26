@@ -67,6 +67,19 @@ defmodule Pinchflat.Media do
   end
 
   @doc """
+  Returns a list of failed media_items for a given source, where
+  failed means the media_item satisfies `MediaQuery.failed`: its most
+  recent download attempt recorded an error and its download isn't prevented.
+
+  Returns [%MediaItem{}, ...].
+  """
+  def list_failed_media_items_for(%Source{} = source) do
+    MediaQuery.new()
+    |> where(^dynamic(^MediaQuery.for_source(source) and ^MediaQuery.failed()))
+    |> Repo.all()
+  end
+
+  @doc """
   For a given media_item, tells you if it is pending download. This is defined as
   the media_item satisfying `MediaQuery.pending` which you should really check out.
 

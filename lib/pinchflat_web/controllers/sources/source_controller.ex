@@ -132,6 +132,15 @@ defmodule PinchflatWeb.Sources.SourceController do
     )
   end
 
+  def retry_failed_downloads(conn, %{"source_id" => id}) do
+    wrap_forced_action(
+      conn,
+      id,
+      "Retrying failed downloads.",
+      &DownloadingHelpers.enqueue_failed_download_tasks/1
+    )
+  end
+
   def force_index(conn, %{"source_id" => id}) do
     wrap_forced_action(
       conn,

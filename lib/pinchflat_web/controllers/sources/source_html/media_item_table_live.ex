@@ -209,6 +209,12 @@ defmodule PinchflatWeb.Sources.MediaItemTableLive do
     )
   end
 
+  defp generate_base_query(source, "failed") do
+    MediaQuery.new()
+    |> select(^select_fields())
+    |> where(^dynamic(^MediaQuery.for_source(source) and ^MediaQuery.failed()))
+  end
+
   defp filtered_base_query(base_query, search_term) do
     base_query
     |> MediaQuery.require_assoc(:media_items_search_index)

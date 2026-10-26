@@ -40,6 +40,25 @@ defmodule Pinchflat.Downloading.DownloadingHelpers do
   end
 
   @doc """
+  Starts tasks for retrying the download of a source's _failed_ media items (see
+  `MediaQuery.failed`). The downloads are forced so they're attempted even if a media
+  item is no longer pending, such as when re-downloading existing media failed.
+  A media item keeps its recorded error until a download succeeds. Jobs are not
+  enqueued if the source is set to not download media.
+
+  Returns :ok
+  """
+  def enqueue_failed_download_tasks(%Source{download_media: true} = source) do
+    source
+    |> Media.list_failed_media_items_for()
+    |> Enum.each(&MediaDownloadWorker.kickoff_with_task(&1, %{force: true}))
+  end
+
+  def enqueue_failed_download_tasks(%Source{download_media: false}) do
+    :ok
+  end
+
+  @doc """
   Deletes ALL pending tasks for a source's media items.
 
   Returns :ok
