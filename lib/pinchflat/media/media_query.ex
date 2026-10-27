@@ -34,6 +34,7 @@ defmodule Pinchflat.Media.MediaQuery do
   def download_prevented, do: dynamic([mi], mi.prevent_download == true)
   def culling_prevented, do: dynamic([mi], mi.prevent_culling == true)
   def redownloaded, do: dynamic([mi], not is_nil(mi.media_redownloaded_at))
+  def has_error, do: dynamic([mi], not is_nil(mi.last_error))
   def upload_date_matches(other_date), do: dynamic([mi], fragment("date(?) = date(?)", mi.uploaded_at, ^other_date))
 
   def upload_date_after_source_cutoff do
@@ -133,6 +134,14 @@ defmodule Pinchflat.Media.MediaQuery do
         ^format_matching_profile_preference() and
         ^matches_source_title_regex() and
         ^meets_min_and_max_duration()
+    )
+  end
+
+  def failed do
+    dynamic(
+      [mi],
+      ^has_error() and
+        not (^download_prevented())
     )
   end
 

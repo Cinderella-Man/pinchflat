@@ -50,6 +50,15 @@
       Redownload Existing
     </.link>
   </:option>
+  <:option :if={@source.download_media}>
+    <.link
+      href={~p"/sources/#{@source}/retry_failed_downloads"}
+      method="post"
+      data-confirm="Are you sure you want to retry all failed downloads? Every media item under the Failed tab will be downloaded again."
+    >
+      Retry Failed Downloads
+    </.link>
+  </:option>
   <:option>
     <.link
       href={~p"/sources/#{@source}/force_index"}
