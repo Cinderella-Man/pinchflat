@@ -56,6 +56,9 @@ defmodule Pinchflat.Downloading.MediaDownloader do
   #     In this case, we attempt the download anyway and update the media item with what details we do have.
   #     This case returns {:recovered, updated_media_item, message}
   #   - If we attempt a retry but it fails, we return {:error, :unrecoverable, message}
+  #     (this includes the case where the details we do have can't be saved)
+  # - If the download succeeds but the media item can't be updated with the parsed JSON (eg: a title
+  #   that YouTube gives restricted videos), we return {:error, :save_failed, message}
   # - If there is an unknown error unrelated to the above, we return {:error, :unknown, message}
   # - Finally, if there is no error, we update the media item with the parsed JSON and return {:ok, updated_media_item}
   #
@@ -66,6 +69,7 @@ defmodule Pinchflat.Downloading.MediaDownloader do
   #   - `:unsuitable_for_download` if the media item fails the precheck
   #   - `:unrecoverable` if there was an initial failure and the recovery attempt failed
   #   - `:download_failed` for all other yt-dlp-related downloading errors
+  #   - `:save_failed` if the download succeeded but the media item couldn't be updated
   #   - `:unknown` for any other errors, including those not related to yt-dlp
   defp attempt_download_and_update_for_media_item(media_item, override_opts) do
     output_filepath = FilesystemUtils.generate_metadata_tmpfile(:json)
@@ -73,7 +77,16 @@ defmodule Pinchflat.Downloading.MediaDownloader do
 
     case download_with_options(media_item.original_url, media_with_preloads, output_filepath, override_opts) do
       {:ok, parsed_json} ->
-        update_media_item_from_parsed_json(media_with_preloads, parsed_json)
+        case update_media_item_from_parsed_json(media_with_preloads, parsed_json) do
+          {:ok, updated_media_item} ->
+            {:ok, updated_media_item}
+
+          {:error, changeset} ->
+            message = "Unable to save the downloaded media details: #{format_changeset_errors(changeset)}"
+            Logger.error("Media item ##{media_with_preloads.id}: #{message}")
+
+            {:error, :save_failed, message}
+        end
 
       {:error, :unsuitable_for_download} ->
         message =
@@ -108,8 +121,16 @@ defmodule Pinchflat.Downloading.MediaDownloader do
       anyway
       """)
 
-      {:ok, updated_media_item} = update_media_item_from_parsed_json(media_with_preloads, parsed_json)
-      {:recovered, updated_media_item, error_message}
+      case update_media_item_from_parsed_json(media_with_preloads, parsed_json) do
+        {:ok, updated_media_item} ->
+          {:recovered, updated_media_item, error_message}
+
+        {:error, changeset} ->
+          errors = format_changeset_errors(changeset)
+          Logger.error("Unable to recover error for media item ##{media_with_preloads.id}: #{errors}")
+
+          {:error, :unrecoverable, error_message}
+      end
     else
       err ->
         Logger.error("Unable to recover error for media item ##{media_with_preloads.id}: #{inspect(err)}")
@@ -137,6 +158,16 @@ defmodule Pinchflat.Downloading.MediaDownloader do
     # Don't forgor to use preloaded associations or updates to
     # associations won't work!
     Media.update_media_item(media_with_preloads, parsed_attrs)
+  end
+
+  defp format_changeset_errors(changeset) do
+    changeset
+    |> Ecto.Changeset.traverse_errors(fn {message, opts} ->
+      Enum.reduce(opts, message, fn {key, value}, acc ->
+        String.replace(acc, "%{#{key}}", fn _ -> to_string(value) end)
+      end)
+    end)
+    |> inspect()
   end
 
   defp determine_nfo_filepath(media_item, parsed_json) do
