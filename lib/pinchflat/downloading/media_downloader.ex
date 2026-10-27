@@ -57,6 +57,8 @@ defmodule Pinchflat.Downloading.MediaDownloader do
   #     This case returns {:recovered, updated_media_item, message}
   #   - If we attempt a retry but it fails, we return {:error, :unrecoverable, message}
   #     (this includes the case where the details we do have can't be saved)
+  #   - If yt-dlp fails without printing a message, the message names the error instead
+  #     (eg: `Unknown error: {:error, "", 1}`) so the failure still has a readable reason
   # - If the download succeeds but the media item can't be updated with the parsed JSON (eg: a title
   #   that YouTube gives restricted videos), we return {:error, :save_failed, message}
   # - If there is an unknown error unrelated to the above, we return {:error, :unknown, message}
@@ -96,13 +98,18 @@ defmodule Pinchflat.Downloading.MediaDownloader do
 
         {:error, :unsuitable_for_download, message}
 
-      {:error, message, _exit_code} ->
+      {:error, message, _exit_code} = err ->
         Logger.error("yt-dlp download error for media item ##{media_with_preloads.id}: #{inspect(message)}")
 
-        if String.contains?(to_string(message), recoverable_errors()) do
-          attempt_recovery_from_error(media_with_preloads, output_filepath, message)
-        else
-          {:error, :download_failed, message}
+        cond do
+          blank_message?(message) ->
+            {:error, :download_failed, "Unknown error: #{inspect(err)}"}
+
+          String.contains?(to_string(message), recoverable_errors()) ->
+            attempt_recovery_from_error(media_with_preloads, output_filepath, message)
+
+          true ->
+            {:error, :download_failed, message}
         end
 
       err ->
@@ -169,6 +176,9 @@ defmodule Pinchflat.Downloading.MediaDownloader do
     end)
     |> inspect()
   end
+
+  # Empty or whitespace-only output can't be recorded as a reason: it would read as no error at all
+  defp blank_message?(message), do: is_binary(message) and String.trim(message) == ""
 
   defp determine_nfo_filepath(media_item, parsed_json) do
     if media_item.source.media_profile.download_nfo do
